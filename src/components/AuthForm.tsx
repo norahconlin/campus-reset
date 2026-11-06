@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 
 type Mode = "signup" | "login";
@@ -20,6 +20,10 @@ export default function AuthForm({ mode }: { mode: Mode }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // The button stays disabled until the page's code has loaded, so the browser
+  // can never fall back to a plain form submit that puts details in the URL.
+  const [ready, setReady] = useState(false);
+  useEffect(() => setReady(true), []);
 
   const isSignup = mode === "signup";
 
@@ -57,7 +61,7 @@ export default function AuthForm({ mode }: { mode: Mode }) {
           {isSignup ? "Free to start. No card needed." : "Log in to see this week's plan."}
         </p>
 
-        <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-4">
+        <form method="post" onSubmit={handleSubmit} className="mt-8 flex flex-col gap-4">
           {isSignup && (
             <div className="flex flex-col gap-1.5">
               <label htmlFor="name" className="text-sm font-medium">First name</label>
@@ -82,7 +86,7 @@ export default function AuthForm({ mode }: { mode: Mode }) {
             <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p>
           )}
 
-          <button type="submit" disabled={loading}
+          <button type="submit" disabled={!ready || loading}
             className="mt-2 rounded-full bg-emerald-700 px-6 py-3.5 font-semibold text-white hover:bg-emerald-800 disabled:opacity-60">
             {loading ? "Please wait…" : isSignup ? "Create account" : "Log in"}
           </button>
