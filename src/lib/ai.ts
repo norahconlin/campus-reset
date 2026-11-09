@@ -3,8 +3,18 @@ import { aiPlanSchema, findPlanProblem, planJsonSchema, toStoredPlan, type Store
 import { DAYS, EATING, GOALS, LEVELS } from "@/lib/profile-options";
 
 // The API key is read from the ANTHROPIC_API_KEY environment variable.
-// It is never written in the code.
-const client = new Anthropic();
+// It is never written in the code. Spaces or line breaks picked up while
+// copy-pasting it into Vercel are removed here.
+function getClient() {
+  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+  if (!apiKey) throw new PlanError("The AI isn't set up yet (ANTHROPIC_API_KEY is missing).");
+  if (!/^[\x21-\x7e]+$/.test(apiKey)) {
+    throw new PlanError(
+      "The AI key in Vercel has an extra or unusual character. Copy it again and paste it into ANTHROPIC_API_KEY.",
+    );
+  }
+  return new Anthropic({ apiKey });
+}
 
 // Sonnet-class model, as the project brief asks.
 const MODEL = "claude-sonnet-5-5";
@@ -49,9 +59,7 @@ ${free}`;
 }
 
 export async function generateWeeklyPlan(profile: ProfileForAi): Promise<StoredPlan> {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw new PlanError("The AI isn't set up yet (ANTHROPIC_API_KEY is missing).");
-  }
+  const client = getClient();
 
   let response;
   try {
