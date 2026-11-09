@@ -4,36 +4,103 @@ import { DAYS } from "@/lib/profile-options";
 const DAY_VALUES = DAYS.map((d) => d.value) as ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 export const MEAL_SLOTS = ["breakfast", "lunch", "dinner", "snack"] as const;
 
-// The exact JSON shape we ask Claude to return.
+// Accept small variations like "Monday" or "Breakfast" and turn them into
+// the short values the app uses ("mon", "breakfast").
+const dayValue = z.preprocess(
+  (v) => (typeof v === "string" ? v.trim().toLowerCase().slice(0, 3) : v),
+  z.enum(DAY_VALUES),
+);
+const slotValue = z.preprocess(
+  (v) => (typeof v === "string" ? v.trim().toLowerCase() : v),
+  z.enum(MEAL_SLOTS),
+);
+
+// Used to double-check the AI's answer before saving.
 export const aiPlanSchema = z.object({
-  summary: z.string().describe("Two friendly sentences about how this week is set up."),
-  days: z
-    .array(
-      z.object({
-        day: z.enum(DAY_VALUES),
-        focus: z.string().describe('Short label, e.g. "Full-body strength" or "Rest day"'),
-        workout: z
-          .object({
-            title: z.string(),
-            minutes: z.number().int(),
-            bodyweight: z.array(z.string()).describe("Simple numbered steps for a no-equipment version"),
-            gym: z.array(z.string()).describe("Simple numbered steps for a gym version"),
-          })
-          .nullable()
-          .describe("null on rest days"),
-        meals: z.array(
-          z.object({
-            slot: z.enum(MEAL_SLOTS),
-            name: z.string(),
-            how: z.string().describe("One or two sentences: where to get it or how to make it"),
-            estimatedCost: z.number().describe("Estimated US dollars spent outside a meal plan; 0 if covered"),
-          }),
-        ),
-        tip: z.string().describe("One short, practical tip for the day"),
-      }),
-    )
-    .describe("Exactly 7 entries, Monday to Sunday"),
+  summary: z.string(),
+  days: z.array(
+    z.object({
+      day: dayValue,
+      focus: z.string(),
+      workout: z
+        .object({
+          title: z.string(),
+          minutes: z.number(),
+          bodyweight: z.array(z.string()),
+          gym: z.array(z.string()),
+        })
+        .nullable(),
+      meals: z.array(
+        z.object({
+          slot: slotValue,
+          name: z.string(),
+          how: z.string(),
+          estimatedCost: z.number(),
+        }),
+      ),
+      tip: z.string(),
+    }),
+  ),
 });
+
+// The exact JSON format Claude must follow (structured outputs). Written by
+// hand so the allowed values (enums) are enforced, not just suggested.
+const str = (description?: string) => (description ? { type: "string", description } : { type: "string" });
+const strList = (description: string) => ({ type: "array", description, items: { type: "string" } });
+export const planJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["summary", "days"],
+  properties: {
+    summary: str("Two friendly sentences about how this week is set up."),
+    days: {
+      type: "array",
+      description: "Exactly 7 entries, Monday to Sunday",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["day", "focus", "workout", "meals", "tip"],
+        properties: {
+          day: { type: "string", enum: [...DAY_VALUES] },
+          focus: str('Short label, e.g. "Full-body strength" or "Rest day"'),
+          workout: {
+            description: "null on rest days",
+            anyOf: [
+              { type: "null" },
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["title", "minutes", "bodyweight", "gym"],
+                properties: {
+                  title: str(),
+                  minutes: { type: "integer", description: "Workout length in minutes" },
+                  bodyweight: strList("Simple steps for a no-equipment version"),
+                  gym: strList("Simple steps for a gym version"),
+                },
+              },
+            ],
+          },
+          meals: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["slot", "name", "how", "estimatedCost"],
+              properties: {
+                slot: { type: "string", enum: [...MEAL_SLOTS] },
+                name: str(),
+                how: str("One or two sentences: where to get it or how to make it"),
+                estimatedCost: { type: "number", description: "Estimated US dollars spent outside a meal plan; 0 if covered" },
+              },
+            },
+          },
+          tip: str("One short, practical tip for the day"),
+        },
+      },
+    },
+  },
+} as const;
+
 export type AiPlan = z.infer<typeof aiPlanSchema>;
 
 // What we store in weekly_plans.plan_json: the AI plan plus stable ids for check-offs.

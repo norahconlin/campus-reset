@@ -1,6 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
-import { aiPlanSchema, findPlanProblem, toStoredPlan, type StoredPlan } from "@/lib/plan-schema";
+import { aiPlanSchema, findPlanProblem, planJsonSchema, toStoredPlan, type StoredPlan } from "@/lib/plan-schema";
 import { DAYS, EATING, GOALS, LEVELS } from "@/lib/profile-options";
 
 // The API key is read from the ANTHROPIC_API_KEY environment variable.
@@ -56,10 +55,10 @@ export async function generateWeeklyPlan(profile: ProfileForAi): Promise<StoredP
 
   let response;
   try {
-    response = await client.messages.parse({
+    response = await client.messages.create({
       model: MODEL,
       max_tokens: 16000,
-      output_config: { effort: "medium", format: zodOutputFormat(aiPlanSchema) },
+      output_config: { effort: "medium", format: { type: "json_schema", schema: planJsonSchema } },
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: describeProfile(profile) }],
     });
@@ -70,15 +69,25 @@ export async function generateWeeklyPlan(profile: ProfileForAi): Promise<StoredP
       console.error("Anthropic API error", error.status, error.message);
       throw new PlanError("The AI couldn't build a plan right now. Try again in a minute.");
     }
-    // Anything else here means the reply didn't match our JSON format.
-    console.error("Plan response could not be parsed", error);
-    throw new PlanError("The plan came back in the wrong format. Try again.");
+    throw error;
   }
 
   if (response.stop_reason === "refusal") throw new PlanError("The AI couldn't build this plan. Try changing your answers.");
   if (response.stop_reason === "max_tokens") throw new PlanError("The plan came back incomplete. Try again.");
-  const plan = response.parsed_output;
-  if (!plan) throw new PlanError("The plan came back in the wrong format. Try again.");
+  const text = response.content.find((b) => b.type === "text")?.text ?? "";
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    console.error("Plan was not valid JSON:", text.slice(0, 500));
+    throw new PlanError("The plan came back in the wrong format. Try again.");
+  }
+  const parsed = aiPlanSchema.safeParse(json);
+  if (!parsed.success) {
+    console.error("Plan failed validation:", JSON.stringify(parsed.error.issues.slice(0, 5)));
+    throw new PlanError("The plan came back in the wrong format. Try again.");
+  }
+  const plan = parsed.data;
 
   const problem = findPlanProblem(plan, profile.availability);
   if (problem) {
