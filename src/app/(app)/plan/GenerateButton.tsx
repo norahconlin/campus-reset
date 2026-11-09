@@ -31,7 +31,7 @@ export default function GenerateButton({ label }: { label: string }) {
       {error && (
         <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">
           {error}{" "}
-          {limitReached && <Link href="/account" className="font-semibold underline">See plans</Link>}
+          {limitReached && <Link href="/upgrade" className="font-semibold underline">Upgrade</Link>}
         </p>
       )}
     </div>

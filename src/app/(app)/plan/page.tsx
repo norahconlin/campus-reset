@@ -35,7 +35,8 @@ export default async function PlanPage() {
             <GenerateButton label="Build my plan" />
           ) : (
             <p className="rounded-xl bg-amber-50 px-4 py-3 text-amber-900">
-              You&apos;ve used your free AI plan. Premium plans arrive in Step 10.
+              You&apos;ve used your free AI plan.{" "}
+              <Link href="/upgrade" className="font-semibold underline">Upgrade to Premium</Link> for a new plan every week.
             </p>
           )}
         </div>
@@ -59,11 +60,16 @@ export default async function PlanPage() {
         <Link href="/onboarding" className="text-sm font-semibold text-emerald-800 underline">Change my answers</Link>
       </div>
       <PlanView planId={latest.id} plan={latest.plan} doneKeys={doneKeys} />
-      {premium && (
-        <div className="mt-8 border-t border-stone-200 pt-6">
+      <div className="mt-8 border-t border-stone-200 pt-6">
+        {premium ? (
           <GenerateButton label="Build a fresh plan" />
-        </div>
-      )}
+        ) : (
+          <p className="text-sm text-stone-600">
+            Want a new plan every week?{" "}
+            <Link href="/upgrade" className="font-semibold text-emerald-800 underline">Upgrade to Premium</Link>
+          </p>
+        )}
+      </div>
     </div>
   );
 }
